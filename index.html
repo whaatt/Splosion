@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<title>Splosion</title>
+		<meta http-equiv="content-type" content="text/html; charset=utf-8" />
+
+		<script src="./js/Color/SpaceW3.js" type="text/javascript"></script>
+		<script src="./js/Color/raphael.js" type="text/javascript"></script>
+		<script src="./js/MIDI/AudioDetect.js" type="text/javascript"></script>
+		<script src="./js/MIDI/LoadPlugin.js" type="text/javascript"></script>
+		<script src="./js/MIDI/Plugin.js" type="text/javascript"></script>
+		<script src="./js/MIDI/Player.js" type="text/javascript"></script>
+		<script src="./js/Widgets/Loader.js" type="text/javascript"></script>
+		<script src="./js/Window/Event.js" type="text/javascript"></script>
+		<script src="./js/Window/DOMLoader.XMLHttp.js" type="text/javascript"></script>
+		<script src="./js/Window/DOMLoader.script.js" type="text/javascript"></script>
+		<script src="http://code.jquery.com/jquery-1.10.2.min.js" type="text/javascript"></script>
+		<script src="js/Socket/socket.io.js"></script>
+		
+		<script src="./inc/Base64.js" type="text/javascript"></script>
+		<script src="./inc/base64binary.js" type="text/javascript"></script>
+		
+		<link href="http://fonts.googleapis.com/css?family=Andada" rel="stylesheet" type="text/css" />
+		<style>
+			body {
+			background: #000; color: #fff; font-family: Georgia, Cambria, Andada; line-height: 1.5em;
+			}
+			
+			a {
+			color: #fff
+			}
+		</style>
+	</head>
+	<body>
+		<script type="text/javascript">
+			var paper;
+			var offset = 0;
+			var currChannel = 0;
+			var currScale = 'Chromatic Western'
+			var currAllowed = ['C', 'C#', 'D', 'Eb', 'E', 'F', 'F#', 'G', 'Ab', 'A', 'Bb', 'B']
+			var currPosS = 0;
+			var altMode = false;
+			var center = false
+			var max = 50;
+			
+			var socket;
+			
+			var enharmonic = {
+				'Db' : 'C#',
+				'D#' : 'Eb',
+				'Gb' : 'F#',
+				'G#' : 'Ab',
+				'A#' : 'Bb'
+			}
+			
+			var keys = {
+				'z' : 48,
+				's' : 49,
+				'x' : 50,
+				'd' : 51,
+				'c' : 52,
+				'v' : 53,
+				'g' : 54,
+				'b' : 55,
+				'h' : 56,
+				'n' : 57,
+				'j' : 58,
+				'm' : 59,
+				',' : 60,
+				'q' : 60,
+				'2' : 61,
+				'w' : 62,
+				'3' : 63,
+				'e' : 64,
+				'r' : 65,
+				'5' : 66,
+				't' : 67,
+				'6' : 68,
+				'y' : 69,
+				'7' : 70,
+				'u' : 71,
+				'i' : 72
+			}
+			
+			var keysAlt = {
+				'z' : 40,
+				'x' : 41,
+				'c' : 42,
+				'v' : 43,
+				'b' : 44,
+				'n' : 45,
+				'm' : 46,
+				',' : 47,
+				'a' : 48,
+				's' : 49,
+				'd' : 50,
+				'f' : 51,
+				'g' : 52,
+				'h' : 53,
+				'j' : 54,
+				'k' : 55,
+				'l' : 56,
+				'q' : 57,
+				'w' : 58,
+				'e' : 59,
+				'r' : 60,
+				't' : 61,
+				'y' : 62,
+				'u' : 63,
+				'i' : 64,
+				'o' : 65,
+				'1' : 66,
+				'2' : 67,
+				'3' : 68,
+				'4' : 69,
+				'5' : 70,
+				'6' : 71,
+				'7' : 72,
+				'8' : 73,
+				'9' : 74
+			}
+			
+			var inUse = keys;
+			
+			var keyboard = {
+				'0': 48,
+				'1': 49,
+				'2': 50,
+				'3': 51,
+				'4': 52,
+				'5': 53,
+				'6': 54,
+				'7': 55,
+				'8': 56,
+				'9': 57,
+				'a': 65,
+				'b': 66,
+				'c': 67,
+				'd': 68,
+				'e': 69,
+				'f': 70,
+				'g': 71,
+				'h': 72,
+				'i': 73,
+				'j': 74,
+				'k': 75,
+				'l': 76,
+				'm': 77,
+				'n': 78,
+				'o': 79,
+				'p': 80,
+				'q': 81,
+				'r': 82,
+				's': 83,
+				't': 84,
+				'u': 85,
+				'v': 86,
+				'w': 87,
+				'x': 88,
+				'y': 89,
+				'z': 90,
+				',': 188
+			}
+			
+			var invert = function (obj) {
+				var new_obj = {};
+				for (var prop in obj) {
+					if(obj.hasOwnProperty(prop)) {
+						new_obj[obj[prop]] = prop;
+					}
+				}
+
+				return new_obj;
+			};
+			
+			keyboard = invert(keyboard);
+			
+			var scales = [
+				['Chromatic Western', 'C C# D Eb E F F# G Ab A Bb B'],
+				['Major Western', 'C D E F G A B'],
+				['Natural_Minor Western', 'C D Eb F G Ab Bb'],
+				['Harmonic_Minor Western', 'C D Eb F G Ab B'],
+				['Pentatonic_Major Western', 'C D E G A'],
+				['Pentatonic_Minor Western', 'C Eb F G Bb'],
+				['Blues_Minor Western', 'C Eb F F# G Bb'],
+				['Blues_Major Western', 'C D Eb E G A'],
+				['Arabic Western', 'C Db E F G Ab B'],
+				['Hungarian Western', 'C D Eb F# G Ab B'],
+				['Persian Western', 'C Db E F Gb Ab B'],
+				['Hamsadhvani Carnatic', 'S R2 G3 P N3'],
+				['Revati Carnatic', 'S R1 M1 P N2'],
+				['Kamavardani Carnatic', 'S R1 G3 M2 P D1 N3'],
+				['Kalyani Carnatic', 'S R2 G3 M2 P D2 N3'],
+				['Todi Carnatic', 'S R1 G2 M1 P D1 N2'],
+				['Abhogi Carnatic', 'S R2 G2 M1 D2']
+			]
+			
+			var western = {
+				'S' : 'C',
+				'R1' : 'C#',
+				'R2' : 'D',
+				'G2' : 'Eb',
+				'G3' : 'E',
+				'M1' : 'F',
+				'M2' : 'F#',
+				'P' : 'G',
+				'D1' : 'Ab',
+				'D2' : 'A',
+				'N2' : 'Bb',
+				'N3' : 'B'
+			}
+			
+			var aliases = {
+				'C' : ['C0', 'C1', 'C2', 'C3', 'C4', 'C5', 'C6', 'C7', 'C8'],
+				'C#' : ['C#0', 'C#1', 'C#2', 'C#3', 'C#4', 'C#5', 'C#6', 'C#7'],
+				'D' : ['D0', 'D1', 'D2', 'D3', 'D4', 'D5', 'D6', 'D7'],
+				'Eb' : ['Eb0', 'Eb1', 'Eb2', 'Eb3', 'Eb4', 'Eb5', 'Eb6', 'Eb7'],
+				'E' : ['E0', 'E1', 'E2', 'E3', 'E4', 'E5', 'E6', 'E7'],
+				'F' : ['F0', 'F1', 'F2', 'F3', 'F4', 'F5', 'F6', 'F7'],
+				'F#' : ['F#0', 'F#1', 'F#2', 'F#3', 'F#4', 'F#5', 'F#6', 'F#7'],
+				'G' : ['G0', 'G1', 'G2', 'G3', 'G4', 'G5', 'G6', 'G7'],
+				'Ab' : ['Ab0', 'Ab1', 'Ab2', 'Ab3', 'Ab4', 'Ab5', 'Ab6', 'Ab7'],
+				'A' : ['A0', 'A1', 'A2', 'A3', 'A4', 'A5', 'A6', 'A7'],
+				'Bb' : ['Bb0', 'Bb1', 'Bb2', 'Bb3', 'Bb4', 'Bb5', 'Bb6', 'Bb7'],
+				'B' : ['B0', 'B1', 'B2', 'B3', 'B4', 'B5', 'B6', 'B7']			
+			}
+			
+			Array.prototype.remove = function(from, to) {
+				var rest = this.slice((to || from) + 1 || this.length);
+				this.length = from < 0 ? this.length + from : from;
+				return this.push.apply(this, rest);
+			};
+			
+			function getColor(){
+				return '#'+('00000'+(Math.random()*(1<<24)|0).toString(16)).slice(-6);
+			}
+			
+			function playNote(note){
+				MIDI.noteOn(currChannel, note, 100, 0);
+			}
+			
+			function stopNote(note){
+				MIDI.noteOff(currChannel, note, 0);
+			}
+		
+			var circles = [];
+			var anims = [];
+			var notes = [];
+			var colls = [];
+
+			function drawCircle(x, y, radius, vX, vY, note){
+				if (circles.length > max) { return; }
+				keyN = MIDI.noteToKey[note].slice(0, -1);
+				if (enharmonic.hasOwnProperty(keyN)) { keyN = enharmonic[keyN]; }
+				
+				if (currAllowed.indexOf(keyN) == -1){
+					if (Math.random() > 0.5){
+						while (currAllowed.indexOf(keyN) == -1){
+							note++;
+							keyN = MIDI.noteToKey[note].slice(0, -1);
+							if (enharmonic.hasOwnProperty(keyN)) { keyN = enharmonic[keyN]; }
+						}
+					}
+					
+					else{
+						while (currAllowed.indexOf(keyN) == -1){
+							note--;
+							keyN = MIDI.noteToKey[note].slice(0, -1);
+							if (enharmonic.hasOwnProperty(keyN)) { keyN = enharmonic[keyN]; }
+						}
+					}
+				}
+			
+				var circle = paper.circle(x, y, radius);
+				var color = getColor();
+				circle.attr('fill', color);
+				circles.push(circle);
+				circles[circles.length - 1].attr('opacity', 0.75);
+				anims.push([vX, vY]); notes.push(note);
+				playNote(note);
+				
+				if ($('#status').html() == "Connected"){
+					socket.emit('transmitBall', {'x' : x, 'y' : y, 'vx' : vX, 'vy' : vY, 'color' : color, 'midinote' : note, 'room' : 'Test'}); 
+				}
+			};
+			
+			function drawCircleAlt(x, y, radius, vX, vY, note, color){
+				if (circles.length > max) { return; }
+				keyN = MIDI.noteToKey[note].slice(0, -1);
+				if (enharmonic.hasOwnProperty(keyN)) { keyN = enharmonic[keyN]; }
+				
+				if (currAllowed.indexOf(keyN) == -1){
+					if (Math.random() > 0.5){
+						while (currAllowed.indexOf(keyN) == -1){
+							note++;
+							keyN = MIDI.noteToKey[note].slice(0, -1);
+							if (enharmonic.hasOwnProperty(keyN)) { keyN = enharmonic[keyN]; }
+						}
+					}
+					
+					else{
+						while (currAllowed.indexOf(keyN) == -1){
+							note--;
+							keyN = MIDI.noteToKey[note].slice(0, -1);
+							if (enharmonic.hasOwnProperty(keyN)) { keyN = enharmonic[keyN]; }
+						}
+					}
+				}
+			
+				var circle = paper.circle(x, y, radius);
+				circle.attr('fill', color);
+				circles.push(circle);
+				circles[circles.length - 1].attr('opacity', 0.75);
+				anims.push([vX, vY]); notes.push(note);
+				playNote(note);
+			};
+
+			function refreshFrame(){
+				for (var i = 0; i < circles.length ; i++){
+					var currX = circles[i].attr('cx');
+					var currY = circles[i].attr('cy');
+					var currR = circles[i].attr('r');
+				
+					if (currX > $(window).width() || currY > $(window).height() || currX < 0 || currY < 0){
+						if (Math.random() >= 0.75){
+							circles[i].remove();
+							stopNote(notes[i])
+						
+							anims.remove(i);
+							notes.remove(i);
+							circles.remove(i);
+							continue;
+						}
+						
+						else{
+							if (currX > $(window).width() || currX < 0) { anims[i][0] *= -1; }
+							if (currY > $(window).width() || currY < 0) { anims[i][1] *= -1; }
+						}
+					}
+					
+					var bounced = false;
+					
+					//arggh too sleepy to think of O(f(n)) < O(n^2)
+					for (var j = 0; j < circles.length; j++){
+						if (i != j){
+							var scurX = circles[j].attr('cx');
+							var scurY = circles[j].attr('cy');
+							var scurR = circles[j].attr('r');
+							
+							if (Math.sqrt(Math.pow(scurX - currX, 2) + Math.pow(scurY - currY, 2)) < scurR + currR){
+								if (colls.indexOf(circles[i].id.toString() + ',' + circles[j].id.toString()) == -1){
+									colls.push(circles[i].id.toString() + ',' + circles[j].id.toString());
+									
+									stopNote(notes[i]); playNote(notes[i]);
+									stopNote(notes[j]); playNote(notes[j]);
+									
+									circles[i].attr('cx', currX + anims[j][0]);
+									circles[i].attr('cy', currY + anims[j][1]);
+									
+									if (colls.indexOf(circles[j].id.toString() + ',' + circles[i].id.toString()) == -1){
+									
+										var tempo = anims[i][0]
+										anims[i][0] = anims[j][0]
+										anims[j][0] = tempo
+										
+										var tempt = anims[i][1]
+										anims[i][1] = anims[j][1]
+										anims[j][1] = tempt
+									
+										var animF = Raphael.animation({'fill' : '#ffd700'}, 200);
+										var animBO = Raphael.animation({'fill' : circles[i].attr('fill')}, 200);
+										var animBT = Raphael.animation({'fill' : circles[j].attr('fill')}, 200);
+										
+										circles[i].animate(animF);
+										circles[i].animate(animBO.delay(200));
+									
+										circles[j].animate(animF);
+										circles[j].animate(animBT.delay(200));
+									}
+									
+									bounced = true;
+								}
+							}
+							
+							else{
+								var index = colls.indexOf(circles[i].id.toString() + ',' + circles[j].id.toString());
+								
+								if (index != -1){
+									colls.splice(index, 1);
+								}
+							}
+						}
+					}
+					
+					if (bounced == false){
+						circles[i].attr('cx', currX + anims[i][0]);
+						circles[i].attr('cy', currY + anims[i][1]);
+					}
+				}
+			}
+			
+			function submitServer(){
+				if ($('#status').html() == "Disconnected"){
+					socket.emit('connect', {'room' : 'Test', 'user' : Math.random().toString(36).substr(2, 5)});
+					$('#status').html("Connected");
+					$('#prep').html("to");
+				}
+				
+				else{
+					socket.emit('disconnect', {});
+					$('#status').html("Disconnected");
+					$('#prep').html("from");
+				}
+			}
+			
+			window.onload = function () {
+				socket = io.connect('http://splosion.jit.su');
+				MIDI.loader = new widgets.Loader;
+				MIDI.loadPlugin({
+					instrument : "acoustic_grand_piano",
+					//instruments: [ "acoustic_grand_piano", "acoustic_guitar_(nylon)" ],
+					callback: function() {
+                        MIDI.programChange(0, 0);
+                        //MIDI.programChange(1, 24);
+						
+						MIDI.loader.stop();	
+						paper = Raphael(0, 0, "100%", "100%");
+						var interval = setInterval(refreshFrame, 1000 / 60);
+					}
+				});
+				
+				socket.on('ball', function(data){
+					drawCircleAlt(data.x, data.y, 20, data.vx, data.vy, data.midinote, data.color); 
+				});
+				
+				socket.on('disconnect', function(data){
+					submitServer();
+				});
+				
+				$(window).keyup(function(event) {
+					if (keys.hasOwnProperty(keyboard[event.keyCode])){
+						if (center == true){
+							drawCircle($(window).width()/2, $(window).height()/2, 20, Math.random() * 6 - 3, Math.random() * 6 - 3, inUse[keyboard[event.keyCode]] + offset);
+						}
+						
+						else{
+							drawCircle($(window).width()*Math.random(), $(window).height()*Math.random(), 20, Math.random() * 6 - 3, Math.random() * 6 - 3, inUse[keyboard[event.keyCode]] + offset);
+						}
+					}
+					
+					if (event.keyCode == 187){
+						if (offset < 24) { offset += 12; }
+					}
+					
+					if (event.keyCode == 189){
+						if (offset > -24) { offset -= 12; }
+					}
+					
+					if (event.keyCode == 192){
+						currPosS += 1;
+						currPosS %= scales.length;
+						
+						currScale = scales[currPosS][0];
+						outScale = currScale.split(" ")[0].split("_")[0];
+						$('#scale').html(outScale);
+						
+						currAllowed = scales[currPosS][1];
+						currAllowed = currAllowed.split(" ");
+						
+						if (currScale.split(" ")[1] == "Carnatic"){
+							for (var i = 0; i < currAllowed.length; i++){
+								currAllowed[i] = western[currAllowed[i]];
+							}
+						}
+					}
+					
+					if (event.keyCode == 38){
+						submitServer();
+					}
+					
+					if (event.keyCode == 37){
+						for (var i = 0; i < notes.length; i++){
+							stopNote(notes[i]);
+							circles[i].remove();
+						}
+						
+						circles = [];
+						anims = [];
+						notes = [];
+						colls = [];
+					}
+					
+					
+					/*if (event.keyCode == 40){
+						center = !center;
+					}*/
+					
+					if (event.keyCode == 220){
+						if (!altMode){
+							inUse = keysAlt;
+						}
+						
+						else{
+							inUse = keys;
+						}
+						
+						altMode = !altMode;
+					}
+					
+				});
+			};
+
+		</script>
+		Splosion: Animated in HTML5.<span style="float: right">Change Scale Type: [`] Key</span><br>
+		Audio created with <a href="https://github.com/mudx/MIDI.js">MIDI.js</a>.<span style="float: right">Change Connect: [UP] Key</span><br>
+		Scale is <b><span id="scale">Chromatic</span></b><span style="float: right">Shift Octave Up: [+] Key</span><br>
+		<a onClick="submitServer()" href="#" id="status">Disconnected</a> <span id="prep">from</span> server.<span style="float: right">Shift Octave Down: [-] Key</span>
+		
+		<canvas id="mycanvas" style="display: block;" />
+	</body>
+</html>
